@@ -5,13 +5,14 @@ import ProductCard from './components/ProductCard';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import AuthModal from './components/Auth/AuthModal';
 import ProfileCenter from './components/Profile/ProfileCenter';
-import CartDrawer from './components/Cart/CartDrawer'; // المكون الجديد
+import CartDrawer from './components/Cart/CartDrawer'; 
+import UserOrderHistory from './components/Profile/UserOrderHistory';
 import { Product, CartItem, Order, UserProfile, Category } from './types';
 import { db, collections, onSnapshot, doc, setDoc, auth, getDoc } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { 
   ShoppingCart, X, Plus, Minus, MessageCircle, ShoppingBag, 
-  ShieldCheck, User, Phone, Globe, Loader2, Package, CheckCircle, Clock, Home, LogIn, LayoutDashboard, FileCheck
+  ShieldCheck, User, Phone, Globe, Loader2, Package, CheckCircle, Clock, Home, LogIn, LayoutDashboard, FileCheck, Crown, Layers
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -24,9 +25,10 @@ const App: React.FC = () => {
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const [storeWhatsApp, setStoreWhatsApp] = useState<string>('');
   const [siteName, setSiteName] = useState<string>('GoTher');
+  const [sectionTitleAr, setSectionTitleAr] = useState<string>('أحدث الهدايا المتميزة');
+  const [sectionTitleEn, setSectionTitleEn] = useState<string>('PREMIUM GIFTS');
   const [isLoading, setIsLoading] = useState(true);
   
-  // Auth & Profile State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -39,12 +41,21 @@ const App: React.FC = () => {
   const [customerInfo, setCustomerInfo] = useState({ name: '', whatsapp: '' });
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState(false);
 
   const isAr = lang === 'ar';
 
   const isVideo = (url: string) => {
     return url && (url.startsWith('data:video') || url.endsWith('.mp4') || url.endsWith('.webm'));
   };
+
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveBannerIndex((prev) => (prev + 1) % banners.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [banners.length]);
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
@@ -56,9 +67,7 @@ const App: React.FC = () => {
           if (profileData.status === 'blocked') {
             await auth.signOut();
             setCurrentUser(null);
-            alert(isAr ? 'هذا الحساب محظور' : 'This account is blocked');
           } else {
-            const isAuthorized = profileData.serialId === 1 || profileData.role === 'admin' || profileData.role === 'moderator';
             setCurrentUser({
               ...profileData,
               role: profileData.serialId === 1 ? 'admin' : profileData.role
@@ -84,33 +93,25 @@ const App: React.FC = () => {
     };
 
     const unsubProducts = onSnapshot(collections.products, (snapshot) => {
-      const prodsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-      setProducts(prodsData);
+      setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
       productsLoaded = true;
       checkLoading();
     });
 
     const unsubCategories = onSnapshot(collections.categories, (snapshot) => {
-      const catsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
-      setCategories(catsData);
+      setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
       categoriesLoaded = true;
       checkLoading();
     });
 
     const unsubOrders = onSnapshot(collections.orders, (snapshot) => {
-      const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-      setOrders(ordersData);
+      setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
       ordersLoaded = true;
       checkLoading();
     });
 
     const unsubBanners = onSnapshot(collections.banners, (snapshot) => {
-      const bannersData = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        url: doc.data().url,
-        link: doc.data().link
-      }));
-      setBanners(bannersData);
+      setBanners(snapshot.docs.map(doc => ({ id: doc.id, url: doc.data().url, link: doc.data().link })));
       bannersLoaded = true;
       checkLoading();
     });
@@ -120,19 +121,25 @@ const App: React.FC = () => {
         const data = docSnap.data();
         setStoreWhatsApp(data.whatsapp || '');
         setSiteName(data.siteName || 'GoTher');
-        document.title = `${data.siteName || 'GoTher'} – Animated Gifts Store`;
+        setSectionTitleAr(data.sectionTitleAr || 'أحدث الهدايا المتميزة');
+        setSectionTitleEn(data.sectionTitleEn || 'PREMIUM GIFTS');
       }
     });
 
     return () => {
       unsubAuth(); unsubProducts(); unsubCategories(); unsubOrders(); unsubBanners(); unsubConfig();
     };
-  }, [isAr]);
+  }, []);
 
   const filteredProducts = useMemo(() => {
     if (activeCategory === 'all') return products;
     return products.filter(p => p.category === activeCategory);
   }, [activeCategory, products]);
+
+  const userFilteredOrders = useMemo(() => {
+    if (!currentUser) return [];
+    return orders.filter(o => (o as any).userId === currentUser.uid);
+  }, [orders, currentUser]);
 
   const uiCategories = useMemo(() => [
     { id: 'all', name: 'All', nameAr: 'الكل', icon: '🛍️' },
@@ -141,10 +148,7 @@ const App: React.FC = () => {
 
   const addToCart = (product: Product) => {
     if (!currentUser) { setIsAuthModalOpen(true); return; }
-    if (currentUser.status === 'frozen') {
-      alert(isAr ? 'حسابك مجمد حالياً' : 'Account frozen');
-      return;
-    }
+    if (currentUser.status === 'frozen') return;
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
@@ -155,15 +159,10 @@ const App: React.FC = () => {
     setIsCartOpen(true);
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.id !== productId));
-  };
-
   const updateQuantity = (productId: string, delta: number) => {
     setCart(prev => prev.map(item => {
       if (item.id === productId) {
-        const newQty = Math.max(1, item.quantity + delta);
-        return { ...item, quantity: newQty };
+        return { ...item, quantity: Math.max(1, item.quantity + delta) };
       }
       return item;
     }));
@@ -173,35 +172,28 @@ const App: React.FC = () => {
 
   const handlePlaceOrder = async (method: 'site' | 'whatsapp') => {
     if (!currentUser) { setIsAuthModalOpen(true); return; }
-    if (!customerInfo.name || !customerInfo.whatsapp) {
-      alert(isAr ? 'يرجى ملء جميع البيانات' : 'Please fill all details');
-      return;
-    }
+    
+    const orderId = `ORD-${Date.now()}`;
+    const orderData = {
+      id: orderId,
+      userId: currentUser.uid, // ربط الطلب بالمستخدم
+      customerName: customerInfo.name,
+      customerWhatsApp: customerInfo.whatsapp,
+      items: cart,
+      total: cartTotal,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
 
     if (method === 'site') {
-      const orderId = `ORD-${Date.now()}`;
-      const newOrder: Order = {
-        id: orderId,
-        customerName: customerInfo.name,
-        customerWhatsApp: customerInfo.whatsapp,
-        items: cart,
-        total: cartTotal,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        notes: 'Ordered via Site'
-      };
-
-      try {
-        await setDoc(doc(db, "orders", orderId), newOrder);
-        setCart([]); setShowCheckoutForm(false); setIsCartOpen(false);
-        alert(isAr ? 'تم استلام طلبك بنجاح!' : 'Order received!');
-      } catch (err) {
-        alert(isAr ? 'خطأ في إرسال الطلب' : 'Error placing order');
-      }
-    } else {
-      // Logic for WhatsApp is handled inside CartDrawer, we just clear cart here
-      setCart([]); setShowCheckoutForm(false); setIsCartOpen(false);
+      await setDoc(doc(db, "orders", orderId), orderData);
     }
+    
+    setCart([]); 
+    setShowCheckoutForm(false); 
+    setIsCartOpen(false);
+    setOrderSuccess(true);
+    setIsMenuOpen(true);
   };
 
   const isUserAdmin = currentUser?.serialId === 1 || currentUser?.role === 'admin' || currentUser?.role === 'moderator';
@@ -209,14 +201,13 @@ const App: React.FC = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#0f0518] flex flex-col items-center justify-center text-white">
-        <Loader2 className="h-12 w-12 text-indigo-500 animate-spin mb-4" />
-        <p className="text-sm font-bold tracking-widest uppercase animate-pulse">{isAr ? 'جاري التحميل...' : 'Loading...'}</p>
+        <Loader2 className="h-10 w-10 text-indigo-500 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen bg-[#0f0518] ${isAr ? 'rtl' : 'ltr'}`}>
+    <div className={`min-h-screen bg-[#0f0518] ${isAr ? 'rtl' : 'ltr'} flex flex-col`}>
       
       {isAdminMode && isUserAdmin && currentUser && (
         <AdminDashboard 
@@ -227,24 +218,25 @@ const App: React.FC = () => {
         />
       )}
 
+      {showUserOrders && currentUser && (
+        <UserOrderHistory 
+          orders={userFilteredOrders} 
+          isAr={isAr} 
+          onClose={() => setShowUserOrders(false)} 
+        />
+      )}
+
       <Navbar cartCount={cart.reduce((s, i) => s + i.quantity, 0)} onOpenCart={() => setIsCartOpen(true)} onOpenMenu={() => setIsMenuOpen(true)} lang={lang} setLang={setLang} siteName={siteName} />
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} isAr={isAr} />
       <ProfileCenter isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} isAr={isAr} />
       
       <CartDrawer 
-        isOpen={isCartOpen} 
-        onClose={() => setIsCartOpen(false)} 
-        cart={cart} 
-        onUpdateQuantity={updateQuantity}
-        onRemove={removeFromCart}
-        onPlaceOrder={handlePlaceOrder}
-        isAr={isAr}
-        total={cartTotal}
-        customerInfo={customerInfo}
-        setCustomerInfo={setCustomerInfo}
-        showCheckout={showCheckoutForm}
-        setShowCheckout={setShowCheckoutForm}
+        isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} cart={cart} 
+        onUpdateQuantity={updateQuantity} onRemove={(id) => setCart(c => c.filter(i => i.id !== id))}
+        onPlaceOrder={handlePlaceOrder} isAr={isAr} total={cartTotal}
+        customerInfo={customerInfo} setCustomerInfo={setCustomerInfo}
+        showCheckout={showCheckoutForm} setShowCheckout={setShowCheckoutForm}
         storeWhatsApp={storeWhatsApp}
       />
 
@@ -252,121 +244,143 @@ const App: React.FC = () => {
       {isMenuOpen && (
         <div className="fixed inset-0 z-[150] flex">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsMenuOpen(false)} />
-          <div className={`relative w-80 bg-[#12071d] h-full shadow-2xl flex flex-col border-r border-white/5 animate-slide-in-${isAr ? 'right' : 'left'}`}>
-            <div className="p-8 border-b border-white/5 flex flex-col gap-4 bg-[#1a0a2a]">
+          <div className={`relative w-72 bg-[#12071d] h-full shadow-2xl flex flex-col border-r border-white/5 animate-slide-in-${isAr ? 'right' : 'left'}`}>
+            <div className="p-6 border-b border-white/5 flex flex-col gap-4">
               <div className="flex justify-between items-center">
-                <div className="text-xl font-black text-indigo-400 uppercase">{siteName}</div>
-                <button onClick={() => setIsMenuOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={20}/></button>
+                <div className="text-lg font-black text-indigo-400 uppercase">{siteName}</div>
+                <button onClick={() => setIsMenuOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={18}/></button>
               </div>
               {currentUser && (
-                <div onClick={() => { setIsMenuOpen(false); setIsProfileOpen(true); }} className="mt-4 flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/10 cursor-pointer hover:bg-white/10 transition-all">
-                  <div className="h-10 w-10 bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-400 font-bold">
-                    {currentUser.serialId === 1 ? <ShieldCheck size={20} /> : currentUser.displayName.charAt(0).toUpperCase()}
+                <div onClick={() => { setIsMenuOpen(false); setIsProfileOpen(true); }} className="mt-2 flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer hover:bg-white/10 transition-all">
+                  <div className="h-8 w-8 bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-400 text-xs font-bold">
+                    {currentUser.serialId === 1 ? <ShieldCheck size={16} /> : currentUser.displayName.charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <div className="text-xs font-black text-white truncate max-w-[120px]">{currentUser.displayName}</div>
-                    <div className="text-[9px] text-slate-500 truncate max-w-[150px]">ID: {currentUser.serialId}</div>
-                  </div>
+                  <div className="text-[11px] font-black text-white truncate">{currentUser.displayName}</div>
                 </div>
               )}
             </div>
-            <nav className="p-4 space-y-2 flex-1">
-              <button onClick={() => { setIsMenuOpen(false); window.scrollTo(0,0); }} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-slate-300 hover:bg-white/5 font-bold transition-all"><Home size={20} className="text-indigo-500" /> {isAr ? 'الرئيسية' : 'Home'}</button>
+            <nav className="p-4 space-y-2">
+              <button onClick={() => { setIsMenuOpen(false); setShowUserOrders(false); window.scrollTo(0,0); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-white/5 font-bold transition-all text-xs">
+                <Home size={16} className="text-indigo-400" /> {isAr ? 'الرئيسية' : 'Home'}
+              </button>
+              
               {!currentUser ? (
-                <button onClick={() => { setIsMenuOpen(false); setIsAuthModalOpen(true); }} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-white hover:bg-indigo-600 font-black transition-all bg-indigo-600/20 border border-indigo-600/30"><LogIn size={20} className="text-indigo-400" /> {isAr ? 'تسجيل الدخول' : 'Sign In'}</button>
+                <button onClick={() => { setIsMenuOpen(false); setIsAuthModalOpen(true); }} className="w-full flex items-center gap-3 px-4 py-4 rounded-xl bg-white text-black font-black text-xs transition-all shadow-lg active:scale-95">
+                  <LogIn size={16} /> {isAr ? 'تسجيل الدخول / إنشاء حساب' : 'Login / Create Account'}
+                </button>
               ) : (
                 <>
-                  <button onClick={() => { setIsMenuOpen(false); setShowUserOrders(true); }} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-slate-300 hover:bg-white/5 font-bold transition-all"><Package size={20} className="text-indigo-500" /> {isAr ? 'سجل مشترياتي' : 'Order History'}</button>
-                  {isUserAdmin && (
-                    <div className="mt-6 pt-6 border-t border-white/5">
-                      <button onClick={() => { setIsMenuOpen(false); setIsAdminMode(true); }} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-white hover:bg-indigo-600 font-black transition-all bg-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.4)] border border-white/10">
-                        <LayoutDashboard size={20} className="text-white" /> {isAr ? 'لوحة المسؤول' : 'Admin Panel'}
-                      </button>
-                    </div>
-                  )}
+                  <button onClick={() => { setIsMenuOpen(false); setShowUserOrders(true); setOrderSuccess(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-white/5 font-bold transition-all text-xs group relative">
+                    <Package size={16} className="text-indigo-400" /> 
+                    <span>{isAr ? 'سجل مشترياتي' : 'Order History'}</span>
+                    {orderSuccess && (
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 bg-green-500 text-white text-[8px] px-2 py-0.5 rounded-full font-black animate-pulse shadow-[0_0_15px_rgba(34,197,94,0.6)]">
+                         {isAr ? 'تم استلام طلبك بنجاح!' : 'Order Received!'}
+                      </span>
+                    )}
+                  </button>
+                  <button onClick={() => { setIsMenuOpen(false); setIsCartOpen(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-white/5 font-bold transition-all text-xs">
+                    <ShoppingBag size={16} className="text-indigo-400" /> {isAr ? 'حقيبة المشتريات' : 'Shopping Bag'}
+                  </button>
                 </>
               )}
+
+              {isUserAdmin && (
+                <div className="mt-6 pt-6 border-t border-white/5">
+                  <button onClick={() => { setIsMenuOpen(false); setIsAdminMode(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-indigo-600 text-white font-black text-xs transition-all shadow-lg shadow-indigo-600/20">
+                    <LayoutDashboard size={16} /> {isAr ? 'لوحة التحكم' : 'Admin Panel'}
+                  </button>
+                </div>
+              )}
             </nav>
+            <div className="mt-auto p-6 border-t border-white/5">
+               <div className="text-[10px] text-slate-500 font-bold text-center uppercase tracking-widest">GoTher Store Elite</div>
+            </div>
           </div>
         </div>
       )}
 
-      <main className="pt-24 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Banner Section */}
-        {banners.length > 0 && (
-          <section className="mb-12 flex justify-center relative group px-2">
-            <div className="relative w-full aspect-[16/9] md:aspect-[3/1] rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden shadow-2xl bg-black/20">
-              {banners.map((banner, index) => (
-                <div key={banner.id} className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === activeBannerIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
-                  {isVideo(banner.url) ? <video src={banner.url} className="w-full h-full object-cover" autoPlay muted loop playsInline /> : <img src={banner.url} className="w-full h-full object-cover" alt="Banner" />}
-                </div>
+      {!showUserOrders ? (
+        <main className="pt-24 pb-8 flex-1 max-w-7xl mx-auto w-full px-4">
+          {/* Banner Section */}
+          {banners.length > 0 && (
+            <section className="mb-10 flex justify-center w-full">
+              <div className="relative w-full max-w-4xl aspect-[4/1] md:aspect-[5/1] rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(79,70,229,0.2)] border border-white/10 bg-black/20">
+                {banners.map((banner, index) => (
+                  <div key={banner.id} className={`absolute inset-0 transition-all duration-1000 ease-in-out ${index === activeBannerIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
+                    {isVideo(banner.url) ? 
+                      <video src={banner.url} className="w-full h-full object-cover" autoPlay muted loop playsInline /> : 
+                      <img src={banner.url} className="w-full h-full object-cover" alt="Banner" />
+                    }
+                  </div>
+                ))}
+                <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20 z-[15] pointer-events-none" />
+              </div>
+            </section>
+          )}
+
+          {/* Products Section */}
+          <section id="products">
+             <div className="flex flex-col items-center gap-6 mb-10">
+              <h2 className="text-xl font-black text-white tracking-widest uppercase text-center border-b-2 border-indigo-600 pb-2">
+                {isAr ? sectionTitleAr : sectionTitleEn}
+              </h2>
+              <div className="flex flex-wrap justify-center gap-2 w-full overflow-x-auto pb-2 scrollbar-hide">
+                {uiCategories.map(cat => (
+                  <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all border whitespace-nowrap ${activeCategory === cat.id ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg' : 'bg-white/5 text-slate-400 border-white/10'}`}>
+                    {isAr ? cat.nameAr : cat.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {filteredProducts.map(product => (
+                <ProductCard key={product.id} product={product} lang={lang} onAddToCart={addToCart} onPreview={setPreviewProduct} />
               ))}
             </div>
           </section>
-        )}
+        </main>
+      ) : null}
 
-        {/* Products Section */}
-        <section id="products">
-           <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-10">
-            <h2 className="text-xl md:text-2xl font-black text-white tracking-wide uppercase">{isAr ? 'أحدث الهدايا المتميزة' : 'PREMIUM GIFTS'}</h2>
-            <div className="flex flex-wrap justify-center gap-2 overflow-x-auto pb-2 w-full md:w-auto scrollbar-hide">
-              {uiCategories.map(cat => (
-                <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all border whitespace-nowrap ${activeCategory === cat.id ? 'bg-indigo-600 text-white border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)]' : 'bg-white/5 text-slate-400 border-white/10 hover:border-white/20'}`}>
-                  {isAr ? cat.nameAr : cat.name}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-            {filteredProducts.map(product => (
-              <ProductCard key={product.id} product={product} lang={lang} onAddToCart={addToCart} onPreview={setPreviewProduct} />
-            ))}
-          </div>
-        </section>
-      </main>
+      <footer className="py-6 border-t border-white/5 text-center px-4">
+        <div className="text-[10px] font-black text-slate-600 uppercase tracking-[0.3em]">&copy; {new Date().getFullYear()} {siteName}</div>
+      </footer>
 
       {/* Preview Product Modal */}
       {previewProduct && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/95 backdrop-blur-md" onClick={() => setPreviewProduct(null)} />
-          <div className="relative w-full max-w-4xl bg-[#160a25] rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-up">
-            <button onClick={() => setPreviewProduct(null)} className="absolute top-6 right-6 z-50 text-white hover:text-indigo-400 transition-colors bg-black/40 p-2 rounded-full"><X/></button>
-            
+          <div className="relative w-full max-w-3xl bg-[#160a25] rounded-[2rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-up">
+            <button onClick={() => setPreviewProduct(null)} className="absolute top-4 right-4 z-50 text-white p-2 rounded-full bg-black/50"><X size={20}/></button>
             <div className="flex flex-col md:flex-row">
-              <div className="md:w-3/5 bg-black aspect-video md:aspect-auto flex items-center justify-center overflow-hidden">
+              <div className="md:w-1/2 bg-black aspect-square flex items-center justify-center overflow-hidden">
                 {isVideo(previewProduct.videoUrl || '') ? (
                   <video src={previewProduct.videoUrl} autoPlay loop playsInline controls className="w-full h-full object-contain" />
                 ) : (
                   <img src={previewProduct.previewUrl} className="w-full h-full object-contain" alt="Preview" />
                 )}
               </div>
-              <div className="md:w-2/5 p-8 md:p-12 space-y-8">
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-black text-white mb-2">{isAr ? previewProduct.nameAr : previewProduct.name}</h2>
-                  <div className="text-indigo-400 font-bold text-lg">$ {previewProduct.price.toFixed(2)}</div>
-                </div>
+              <div className="md:w-1/2 p-8 flex flex-col justify-center">
+                <h2 className="text-xl font-black text-white mb-1">{isAr ? previewProduct.nameAr : previewProduct.name}</h2>
+                <div className="text-indigo-400 font-bold mb-4">$ {previewProduct.price.toFixed(2)}</div>
                 
-                <div className="space-y-4">
-                  <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{isAr ? 'التنسيقات المتاحة' : 'AVAILABLE FORMATS'}</div>
-                  <div className="flex flex-wrap gap-2">
-                    {previewProduct.formats.map(f => (
-                      <span key={f} className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[9px] font-black text-slate-300">{f}</span>
+                {previewProduct.formats && previewProduct.formats.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-8">
+                    {previewProduct.formats.map(fmt => (
+                      <span key={fmt} className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[10px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-1.5 shadow-sm">
+                        <Layers size={10} className="text-indigo-500" />
+                        {fmt}
+                      </span>
                     ))}
                   </div>
-                </div>
+                )}
 
-                <div className="pt-8 border-t border-white/5 flex flex-col gap-4">
-                  <button 
-                    onClick={() => { addToCart(previewProduct); setPreviewProduct(null); }}
-                    className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 active:scale-95"
-                  >
-                    <ShoppingBag size={20} />
-                    {isAr ? 'إضافة إلى السلة' : 'ADD TO CART'}
-                  </button>
-                  <div className="text-center text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
-                    {isAr ? 'دفع آمن واستلام فوري عبر الواتساب' : 'Secure payment & instant delivery'}
-                  </div>
-                </div>
+                <button 
+                  onClick={() => { addToCart(previewProduct); setPreviewProduct(null); }}
+                  className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                >
+                  <ShoppingBag size={18} /> {isAr ? 'إضافة إلى السلة' : 'ADD TO CART'}
+                </button>
               </div>
             </div>
           </div>

@@ -1,7 +1,20 @@
 
 import { initializeApp } from "firebase/app";
-// Import query and where from firebase/firestore
-import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, updateDoc, deleteDoc, addDoc, getDoc, query, where } from "firebase/firestore";
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  getDocs, 
+  onSnapshot, 
+  updateDoc, 
+  deleteDoc, 
+  addDoc, 
+  getDoc, 
+  query, 
+  where 
+} from "firebase/firestore";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
@@ -14,7 +27,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// تفعيل Force Long Polling لحل مشاكل الاتصال بالخادم (Backend connection issues)
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+});
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -27,5 +45,4 @@ export const collections = {
   categories: collection(db, "categories")
 };
 
-// Export query and where functions to fix compilation errors in components
 export { doc, setDoc, getDocs, onSnapshot, updateDoc, deleteDoc, addDoc, getDoc, query, where };

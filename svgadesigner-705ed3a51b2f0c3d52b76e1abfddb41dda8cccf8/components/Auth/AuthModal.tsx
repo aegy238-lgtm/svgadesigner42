@@ -51,7 +51,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isAr }) => {
     setLoading(true);
     setError('');
     try {
-      // استخدام Popup هو الأفضل عند الرفع على رابط خارجي
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       
@@ -70,7 +69,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isAr }) => {
           role: isAdmin ? 'admin' : 'user',
           createdAt: new Date().toISOString(),
           serialId: assignedId,
-          linkedPassword: Math.random().toString(36).slice(-8) // كلمة سر عشوائية يمكن للمدير تغييرها لاحقاً
+          linkedPassword: Math.random().toString(36).slice(-8)
         };
         await setDoc(userDocRef, profile);
       } else {
@@ -103,7 +102,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isAr }) => {
       
       if (querySnap.empty) {
         if (serialIdNum === 1) {
-          // محاولة الدخول ببريد المدير إذا لم يكن مسجلاً في الداتابيز بعد
+          // If Firestore is empty but they try to log in as admin, try Firebase Auth directly
           return await signInWithEmailAndPassword(auth, ADMIN_EMAIL, password);
         }
         throw new Error(isAr ? 'عذراً، هذا المعرف (ID) غير موجود' : 'This ID is not registered.');
@@ -111,15 +110,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isAr }) => {
       
       const userData = querySnap.docs[0].data() as UserProfile;
       
-      // التحقق من كلمة السر المربوطة (Linked Password)
       if (userData.linkedPassword && userData.linkedPassword !== password) {
          throw new Error(isAr ? 'كلمة المرور غير صحيحة لهذا المعرف' : 'Incorrect password for this ID.');
       }
 
-      // الدخول الفعلي باستخدام البريد المخزن وكلمة السر المدخلة
       return await signInWithEmailAndPassword(auth, userData.email, password);
     } else {
-      // تسجيل دخول عادي بالبريد
       return await signInWithEmailAndPassword(auth, cleanIdentifier.toLowerCase(), password);
     }
   };
@@ -144,6 +140,19 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isAr }) => {
           if (data.email.toLowerCase() === ADMIN_EMAIL && data.serialId !== 1) {
              await setDoc(userDocRef, { serialId: 1, role: 'admin' }, { merge: true });
           }
+        } else if (userCred.user.email?.toLowerCase() === ADMIN_EMAIL) {
+           // Auto-create admin profile if it doesn't exist in Firestore
+           const adminProfile: UserProfile = {
+             uid: userCred.user.uid,
+             email: userCred.user.email || '',
+             displayName: 'Admin Manager',
+             status: 'active',
+             role: 'admin',
+             createdAt: new Date().toISOString(),
+             serialId: 1,
+             linkedPassword: password
+           };
+           await setDoc(userDocRef, adminProfile);
         }
       } else {
         if (password.length < 6) throw new Error(isAr ? 'كلمة المرور قصيرة جداً' : 'Password too short.');
@@ -200,7 +209,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isAr }) => {
             {isLogin ? (isAr ? 'تسجيل الدخول' : 'Access Hub') : (isAr ? 'عضوية جديدة' : 'New Identity')}
           </h2>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-            {isLogin ? (isAr ? 'ادخل بالمعرف (ID) وكلمة السر المربوطة' : 'Login with ID and Linked Password') : (isAr ? 'انضم إلى نخبة GoTher' : 'Join the elite club')}
+            {isLogin ? (isAr ? 'ادخل بالمعرف (ID) أو البريد الإلكتروني' : 'Login with ID or Email Address') : (isAr ? 'انضم إلى نخبة GoTher' : 'Join the elite club')}
           </p>
         </div>
 

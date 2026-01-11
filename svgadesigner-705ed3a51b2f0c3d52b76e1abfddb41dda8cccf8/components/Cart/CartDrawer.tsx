@@ -32,8 +32,21 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
     
-    const itemsText = cart.map(i => `- ${isAr ? i.nameAr : i.name} (x${i.quantity})`).join('%0A');
-    const message = `*طلب جديد من متجر GoTher*%0A%0A*العميل:* ${customerInfo.name}%0A*المنتجات:*%0A${itemsText}%0A%0A*الإجمالي:* $${total.toFixed(2)}%0A%0Aيرجى تأكيد الطلب.`;
+    // بناء نص تفصيلي لكل منتج في السلة
+    const itemsText = cart.map(item => {
+      const name = isAr ? item.nameAr : item.name;
+      const formats = item.formats && item.formats.length > 0 ? `[${item.formats.join(', ')}]` : '';
+      return `%0A🎁 *${name}*%0A   - ID: #${item.id}%0A   - الصيغ: ${formats}%0A   - السعر: $${item.price.toFixed(2)}%0A   - الكمية: x${item.quantity}%0A   - المجموع الفرعي: $${(item.price * item.quantity).toFixed(2)}%0A`;
+    }).join('%0A');
+
+    const header = isAr ? '*طلب جديد من متجر GoTher 🚀*' : '*New Order from GoTher Store 🚀*';
+    const customerLabel = isAr ? '*العميل:*' : '*Customer:*';
+    const productsLabel = isAr ? '*المنتجات المطلوبة:*' : '*Requested Products:*';
+    const totalLabel = isAr ? '*الإجمالي النهائي:*' : '*Grand Total:*';
+    const footer = isAr ? 'يرجى تأكيد الطلب وتجهيز الملفات.' : 'Please confirm the order and prepare files.';
+
+    const message = `${header}%0A%0A${customerLabel} ${customerInfo.name}%0A${customerLabel} ${customerInfo.whatsapp}%0A%0A${productsLabel}%0A${itemsText}%0A--------------------------%0A${totalLabel} *$${total.toFixed(2)}*%0A--------------------------%0A%0A${footer}`;
+    
     window.open(`https://wa.me/${storeWhatsApp}?text=${message}`, '_blank');
     onPlaceOrder('whatsapp');
   };
