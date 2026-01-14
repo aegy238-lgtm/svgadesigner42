@@ -32,22 +32,41 @@ const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
     
-    // بناء نص تفصيلي لكل منتج في السلة
+    // بناء نص تفصيلي واحترافي لكل منتج في السلة
     const itemsText = cart.map(item => {
       const name = isAr ? item.nameAr : item.name;
-      const formats = item.formats && item.formats.length > 0 ? `[${item.formats.join(', ')}]` : '';
-      return `%0A🎁 *${name}*%0A   - ID: #${item.id}%0A   - الصيغ: ${formats}%0A   - السعر: $${item.price.toFixed(2)}%0A   - الكمية: x${item.quantity}%0A   - المجموع الفرعي: $${(item.price * item.quantity).toFixed(2)}%0A`;
-    }).join('%0A');
+      const category = isAr ? (item.categoryAr || item.category) : item.category;
+      const formats = item.formats && item.formats.length > 0 ? item.formats.join(', ') : '---';
+      const level = item.level || 'Premium';
+      
+      if (isAr) {
+        return `%0A🎁 *${name}*%0A• المعرف: #${item.id}%0A• القسم: ${category}%0A• المستوى: ${level}%0A• الصيغ: [${formats}]%0A• السعر: $${item.price.toFixed(2)}%0A• الكمية: ${item.quantity}%0A• المجموع: *$${(item.price * item.quantity).toFixed(2)}*%0A`;
+      } else {
+        return `%0A🎁 *${name}*%0A• SKU: #${item.id}%0A• Category: ${category}%0A• Level: ${level}%0A• Formats: [${formats}]%0A• Unit Price: $${item.price.toFixed(2)}%0A• Quantity: x${item.quantity}%0A• Subtotal: *$${(item.price * item.quantity).toFixed(2)}*%0A`;
+      }
+    }).join('%0A---%0A');
 
-    const header = isAr ? '*طلب جديد من متجر GoTher 🚀*' : '*New Order from GoTher Store 🚀*';
-    const customerLabel = isAr ? '*العميل:*' : '*Customer:*';
-    const productsLabel = isAr ? '*المنتجات المطلوبة:*' : '*Requested Products:*';
-    const totalLabel = isAr ? '*الإجمالي النهائي:*' : '*Grand Total:*';
-    const footer = isAr ? 'يرجى تأكيد الطلب وتجهيز الملفات.' : 'Please confirm the order and prepare files.';
-
-    const message = `${header}%0A%0A${customerLabel} ${customerInfo.name}%0A${customerLabel} ${customerInfo.whatsapp}%0A%0A${productsLabel}%0A${itemsText}%0A--------------------------%0A${totalLabel} *$${total.toFixed(2)}*%0A--------------------------%0A%0A${footer}`;
+    const header = isAr 
+      ? '🚀 *طلب شراء جديد - متجر GoTher*' 
+      : '🚀 *New Purchase Order - GoTher Store*';
     
-    window.open(`https://wa.me/${storeWhatsApp}?text=${message}`, '_blank');
+    const customerSection = isAr
+      ? `👤 *بيانات العميل:*%0A• الاسم: ${customerInfo.name}%0A• واتساب/ID: ${customerInfo.whatsapp}`
+      : `👤 *Customer Details:*%0A• Name: ${customerInfo.name}%0A• WhatsApp/ID: ${customerInfo.whatsapp}`;
+
+    const productsHeader = isAr ? '📦 *المنتجات المطلوبة:*' : '📦 *Requested Items:*';
+    
+    const totalSection = isAr
+      ? `💰 *الإجمالي النهائي: $${total.toFixed(2)}*`
+      : `💰 *Grand Total: $${total.toFixed(2)}*`;
+
+    const footer = isAr 
+      ? '✨ *يرجى تأكيد الطلب وتجهيز الروابط لإتمام عملية التسليم.*' 
+      : '✨ *Please review the order and prepare delivery links.*';
+
+    const fullMessage = `${header}%0A%0A${customerSection}%0A%0A---%0A${productsHeader}%0A${itemsText}%0A---%0A%0A${totalSection}%0A%0A${footer}`;
+    
+    window.open(`https://wa.me/${storeWhatsApp}?text=${fullMessage}`, '_blank');
     onPlaceOrder('whatsapp');
   };
 

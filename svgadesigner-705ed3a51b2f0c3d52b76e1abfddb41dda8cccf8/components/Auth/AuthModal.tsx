@@ -1,14 +1,13 @@
 
 import React, { useState } from 'react';
-import { auth, db, doc, setDoc, getDoc, collections, getDocs, query, where, googleProvider } from '../../firebase';
+import { auth, db, doc, setDoc, getDoc, collections, getDocs, query, where, orderBy, limit } from '../../firebase';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   updateProfile,
-  signOut,
-  signInWithPopup
+  signOut
 } from 'firebase/auth';
-import { X, Mail, Lock, User, Loader2, AlertCircle, ShieldCheck, Hash } from 'lucide-react';
+import { X, Mail, Lock, User, Loader2, AlertCircle, ShieldCheck, Hash, UserPlus, LogIn } from 'lucide-react';
 import { UserProfile } from '../../types';
 
 interface AuthModalProps {
@@ -29,64 +28,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isAr }) => {
 
   if (!isOpen) return null;
 
-  const toggleMode = () => {
-    setIsLogin(!isLogin);
-    setError('');
-    setIdentifier('');
-    setPassword('');
-  };
-
   const generateNewSerialId = async () => {
-    const qAll = query(collections.users);
-    const allUsersSnap = await getDocs(qAll);
-    let maxId = 1000;
-    allUsersSnap.forEach(doc => {
-      const u = doc.data() as UserProfile;
-      if (u.serialId && u.serialId > maxId) maxId = u.serialId;
-    });
-    return maxId + 1;
-  };
-
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    setError('');
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      
-      const userDocRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userDocRef);
-      
-      if (!userDoc.exists()) {
-        const isAdmin = user.email?.toLowerCase() === ADMIN_EMAIL;
-        const assignedId = isAdmin ? 1 : await generateNewSerialId();
-        
-        const profile: UserProfile = {
-          uid: user.uid,
-          email: user.email || '',
-          displayName: user.displayName || (isAdmin ? 'Admin' : 'New User'),
-          status: 'active',
-          role: isAdmin ? 'admin' : 'user',
-          createdAt: new Date().toISOString(),
-          serialId: assignedId,
-          linkedPassword: Math.random().toString(36).slice(-8)
-        };
-        await setDoc(userDocRef, profile);
-      } else {
-        const data = userDoc.data() as UserProfile;
-        if (data.status === 'blocked') {
-          await signOut(auth);
-          throw new Error(isAr ? 'عذراً، هذا الحساب محظور' : 'This account is blocked.');
-        }
-      }
-      onClose();
-    } catch (err: any) {
-      console.error("Google Auth Error:", err);
-      let msg = isAr ? 'فشل الاتصال بجوجل، حاول مرة أخرى' : 'Google connection failed, try again';
-      if (err.message) msg = err.message;
-      setError(msg);
-    } finally {
-      setLoading(false);
+      const q = query(collections.users, orderBy("serialId", "desc"), limit(1));
+      const snap = await getDocs(q);
+      if (snap.empty) return 1001;
+      const lastUser = snap.docs[0].data() as UserProfile;
+      return (lastUser.serialId || 1000) + 1;
+    } catch (e) {
+      console.error("ID Generation Error:", e);
+      return Math.floor(Math.random() * 9000) + 2000;
     }
   };
 
@@ -96,24 +47,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isAr }) => {
     
     if (isNumericId) {
       const serialIdNum = parseInt(cleanIdentifier, 10);
-      
       const q = query(collections.users, where("serialId", "==", serialIdNum));
       const querySnap = await getDocs(q);
       
       if (querySnap.empty) {
-        if (serialIdNum === 1) {
-          // If Firestore is empty but they try to log in as admin, try Firebase Auth directly
+        if (cleanIdentifier === '111' || cleanIdentifier === '1') {
           return await signInWithEmailAndPassword(auth, ADMIN_EMAIL, password);
         }
-        throw new Error(isAr ? 'عذراً، هذا المعرف (ID) غير موجود' : 'This ID is not registered.');
+        throw new Error(isAr ? 'المعرف (ID) غير مسجل' : 'ID is not registered');
       }
-      
       const userData = querySnap.docs[0].data() as UserProfile;
-      
-      if (userData.linkedPassword && userData.linkedPassword !== password) {
-         throw new Error(isAr ? 'كلمة المرور غير صحيحة لهذا المعرف' : 'Incorrect password for this ID.');
-      }
-
       return await signInWithEmailAndPassword(auth, userData.email, password);
     } else {
       return await signInWithEmailAndPassword(auth, cleanIdentifier.toLowerCase(), password);
@@ -130,143 +73,124 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, isAr }) => {
         const userCred = await handleIdentifierLogin();
         const userDocRef = doc(db, "users", userCred.user.uid);
         const userDoc = await getDoc(userDocRef);
-        
         if (userDoc.exists()) {
           const data = userDoc.data() as UserProfile;
           if (data.status === 'blocked') {
             await signOut(auth);
-            throw new Error(isAr ? 'الحساب محظور حالياً' : 'Account is blocked.');
+            throw new Error(isAr ? 'هذا الحساب محظور حالياً' : 'Account is blocked');
           }
-          if (data.email.toLowerCase() === ADMIN_EMAIL && data.serialId !== 1) {
-             await setDoc(userDocRef, { serialId: 1, role: 'admin' }, { merge: true });
-          }
-        } else if (userCred.user.email?.toLowerCase() === ADMIN_EMAIL) {
-           // Auto-create admin profile if it doesn't exist in Firestore
-           const adminProfile: UserProfile = {
-             uid: userCred.user.uid,
-             email: userCred.user.email || '',
-             displayName: 'Admin Manager',
-             status: 'active',
-             role: 'admin',
-             createdAt: new Date().toISOString(),
-             serialId: 1,
-             linkedPassword: password
-           };
-           await setDoc(userDocRef, adminProfile);
         }
       } else {
-        if (password.length < 6) throw new Error(isAr ? 'كلمة المرور قصيرة جداً' : 'Password too short.');
-        
         const targetEmail = identifier.toLowerCase().trim();
-        const isAdmin = targetEmail === ADMIN_EMAIL;
+        if (!targetEmail.includes('@')) throw new Error(isAr ? 'يرجى إدخال بريد إلكتروني صحيح' : 'Invalid email format');
+        if (password.length < 6) throw new Error(isAr ? 'كلمة المرور قصيرة جداً (6 رموز على الأقل)' : 'Password too short');
         
         const userCred = await createUserWithEmailAndPassword(auth, targetEmail, password);
         await updateProfile(userCred.user, { displayName: name || 'User' });
-        
-        const assignedId = isAdmin ? 1 : await generateNewSerialId();
-
+        const assignedId = (targetEmail === ADMIN_EMAIL) ? 111 : await generateNewSerialId();
         const profile: UserProfile = {
           uid: userCred.user.uid,
           email: targetEmail,
-          displayName: name || (isAdmin ? 'Admin' : 'User'),
+          displayName: name || 'User',
           status: 'active',
-          role: isAdmin ? 'admin' : 'user',
+          role: targetEmail === ADMIN_EMAIL ? 'admin' : 'user',
           createdAt: new Date().toISOString(),
           serialId: assignedId,
           linkedPassword: password
         };
-        
         await setDoc(doc(db, "users", userCred.user.uid), profile);
       }
       onClose();
     } catch (err: any) {
-      console.error("Auth Error:", err.code);
-      let errMsg = isAr ? 'فشل تسجيل الدخول، تأكد من البيانات' : 'Login failed, check your data';
-      if (err.code === 'auth/invalid-credential') {
-        errMsg = isAr ? 'البيانات المدخلة (ID/Email) أو كلمة السر خاطئة' : 'Invalid ID/Email or Password';
-      } else if (err.message) {
-        errMsg = err.message;
-      }
-      setError(errMsg);
+      let msg = isAr ? 'فشل العملية، تأكد من صحة البيانات' : 'Operation failed';
+      if (err.code === 'auth/email-already-in-use') msg = isAr ? 'البريد مسجل بالفعل' : 'Email in use';
+      setError(err.message || msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const isMasterLogin = identifier === '1' || identifier.toLowerCase() === ADMIN_EMAIL;
-
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-[#160a25] border border-white/10 rounded-3xl p-8 shadow-2xl animate-scale-up">
-        <button onClick={onClose} className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors"><X size={20}/></button>
+      <div className="absolute inset-0 bg-black/90 backdrop-blur-xl" onClick={onClose} />
+      
+      <div className="relative w-full max-w-md bg-[#160a25] border border-white/10 rounded-[3rem] p-8 shadow-[0_0_80px_rgba(0,0,0,0.8)] animate-scale-up overflow-hidden">
+        
+        {/* التبديل العلوي */}
+        <div className="flex bg-black/40 p-1.5 rounded-[1.5rem] mb-10 border border-white/5">
+          <button 
+            onClick={() => setIsLogin(true)}
+            className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-[11px] font-black transition-all duration-500 ${isLogin ? 'bg-indigo-600 text-white shadow-[0_4px_20px_rgba(79,70,229,0.4)]' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            <LogIn size={16} />
+            {isAr ? 'تسجيل دخول' : 'LOGIN'}
+          </button>
+          <button 
+            onClick={() => setIsLogin(false)}
+            className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-[11px] font-black transition-all duration-500 ${!isLogin ? 'bg-emerald-600 text-white shadow-[0_4px_20px_rgba(16,185,129,0.4)]' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            <UserPlus size={16} />
+            {isAr ? 'حساب جديد' : 'REGISTER'}
+          </button>
+        </div>
+
+        <button onClick={onClose} className="absolute top-6 right-8 text-slate-500 hover:text-white transition-colors z-20">
+          <X size={20}/>
+        </button>
         
         <div className="text-center mb-8">
-          <div className={`h-16 w-16 ${isMasterLogin ? 'bg-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.6)] animate-pulse' : 'bg-white/5'} rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10 transition-all duration-500`}>
-             {isMasterLogin ? <ShieldCheck className="text-white" size={32} /> : isLogin ? <Hash className="text-indigo-400" /> : <User className="text-indigo-400" />}
-          </div>
-          <h2 className="text-2xl font-black mb-2 uppercase tracking-tighter">
-            {isLogin ? (isAr ? 'تسجيل الدخول' : 'Access Hub') : (isAr ? 'عضوية جديدة' : 'New Identity')}
+          <h2 className={`text-4xl font-black mb-2 uppercase tracking-tighter transition-colors duration-500 ${isLogin ? 'text-indigo-400' : 'text-emerald-400'}`}>
+            {isLogin ? (isAr ? 'مرحباً بك' : 'Welcome') : (isAr ? 'عضوية جديدة' : 'Join Us')}
           </h2>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-            {isLogin ? (isAr ? 'ادخل بالمعرف (ID) أو البريد الإلكتروني' : 'Login with ID or Email Address') : (isAr ? 'انضم إلى نخبة GoTher' : 'Join the elite club')}
+          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-[0.3em]">
+            {isLogin ? (isAr ? 'ادخل عالم الهدايا الرقمية' : 'Enter digital heaven') : (isAr ? 'أنشئ هويتك الخاصة الآن' : 'Create your identity')}
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-            <div className="flex items-center gap-3 text-red-400 text-[11px] font-bold">
-              <AlertCircle size={14} />
-              <span>{error}</span>
-            </div>
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 animate-pulse">
+            <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
+            <span className="text-red-400 text-[10px] font-black leading-tight uppercase tracking-wide">{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div className="relative group">
-              <User className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 transition-colors`} />
-              <input required type="text" placeholder={isAr ? 'الاسم المعروض' : 'Display Name'} className={`w-full bg-white/5 border border-white/10 rounded-xl ${isAr ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-4 text-sm focus:border-indigo-500 focus:outline-none transition-all`} value={name} onChange={e => setName(e.target.value)} />
+              <User className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 group-focus-within:text-emerald-400 transition-colors`} />
+              <input required type="text" placeholder={isAr ? 'الاسم بالكامل / اللقب' : 'Display Name'} className="w-full bg-white/5 border border-white/10 rounded-2xl pr-12 pl-4 py-4 text-sm focus:border-emerald-500 focus:bg-white/[0.08] focus:outline-none transition-all text-white placeholder:text-slate-600 font-bold" value={name} onChange={e => setName(e.target.value)} />
             </div>
           )}
+          
           <div className="relative group">
-            {isLogin ? <Hash className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500`} /> : <Mail className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500`} />}
-            <input required type="text" placeholder={isLogin ? (isAr ? 'المعرف (ID) أو البريد' : 'Serial ID or Email') : (isAr ? 'البريد الإلكتروني' : 'Email Address')} className={`w-full bg-white/5 border border-white/10 rounded-xl ${isAr ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-4 text-sm focus:border-indigo-500 focus:outline-none transition-all`} value={identifier} onChange={e => setIdentifier(e.target.value)} />
-          </div>
-          <div className="relative group">
-            <Lock className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500`} />
-            <input required type="password" placeholder={isAr ? 'كلمة المرور' : 'Password'} className={`w-full bg-white/5 border border-white/10 rounded-xl ${isAr ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-4 text-sm focus:border-indigo-500 focus:outline-none transition-all`} value={password} onChange={e => setPassword(e.target.value)} />
+            {isLogin ? <Hash className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 group-focus-within:text-indigo-400 transition-colors`} /> : 
+                      <Mail className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 group-focus-within:text-emerald-400 transition-colors`} />}
+            <input required type="text" placeholder={isLogin ? (isAr ? 'المعرف (ID) أو البريد الإلكتروني' : 'ID or Email') : (isAr ? 'البريد الإلكتروني' : 'Email Address')} className={`w-full bg-white/5 border border-white/10 rounded-2xl pr-12 pl-4 py-4 text-sm ${isLogin ? 'focus:border-indigo-500' : 'focus:border-emerald-500'} focus:bg-white/[0.08] focus:outline-none transition-all text-white placeholder:text-slate-600 font-bold`} value={identifier} onChange={e => setIdentifier(e.target.value)} />
           </div>
 
-          <button type="submit" disabled={loading} className={`w-full py-4 rounded-xl font-black shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 ${isMasterLogin ? 'bg-indigo-600 text-white shadow-indigo-600/20' : 'bg-white text-black'}`}>
-            {loading ? <Loader2 className="animate-spin" size={18} /> : null}
-            {isLogin ? (isAr ? 'دخول آمن' : 'SECURE LOGIN') : (isAr ? 'إنشاء حساب' : 'REGISTER')}
+          <div className="relative group">
+            <Lock className={`absolute ${isAr ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 ${isLogin ? 'group-focus-within:text-indigo-400' : 'group-focus-within:text-emerald-400'} transition-colors`} />
+            <input required type="password" placeholder={isAr ? 'كلمة المرور' : 'Password'} className={`w-full bg-white/5 border border-white/10 rounded-2xl pr-12 pl-4 py-4 text-sm ${isLogin ? 'focus:border-indigo-500' : 'focus:border-emerald-500'} focus:bg-white/[0.08] focus:outline-none transition-all text-white placeholder:text-slate-600 font-bold`} value={password} onChange={e => setPassword(e.target.value)} />
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={loading} 
+            className={`w-full py-4.5 rounded-[1.2rem] font-black text-xs tracking-[0.2em] shadow-2xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 mt-6 border-b-4 ${
+              isLogin 
+                ? 'bg-indigo-600 text-white border-indigo-800 hover:bg-indigo-500 shadow-indigo-900/40' 
+                : 'bg-emerald-600 text-white border-emerald-800 hover:bg-emerald-500 shadow-emerald-900/40'
+            }`}
+          >
+            {loading ? <Loader2 className="animate-spin" size={18} /> : (isLogin ? <LogIn size={18} /> : <UserPlus size={18} />)}
+            {isLogin ? (isAr ? 'دخول آمن' : 'SECURE LOGIN') : (isAr ? 'إنشاء حساب' : 'CREATE ACCOUNT')}
           </button>
         </form>
 
-        <div className="relative my-8">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-          <div className="relative flex justify-center text-[10px] uppercase font-black"><span className="bg-[#160a25] px-4 text-slate-500">{isAr ? 'أو عبر' : 'Or via'}</span></div>
-        </div>
-
-        <button 
-          onClick={handleGoogleSignIn}
-          disabled={loading}
-          className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-xl font-black hover:bg-white/10 transition-all flex items-center justify-center gap-3 active:scale-95"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24">
-            <path fill="#EA4335" d="M12 5.04c1.9 0 3.51.64 4.85 1.91l3.6-3.6C18.23 1.34 15.37 0 12 0 7.31 0 3.32 2.69 1.39 6.6l4.21 3.27C6.6 6.89 9.09 5.04 12 5.04z"/>
-            <path fill="#4285F4" d="M23.49 12.27c0-.86-.07-1.69-.21-2.5H12v4.73h6.44c-.28 1.48-1.13 2.74-2.4 3.58l3.73 2.89c2.18-2.01 3.72-4.97 3.72-8.7z"/>
-            <path fill="#FBBC05" d="M5.6 14.86c-.24-.73-.38-1.5-.38-2.3 0-.8.14-1.57.38-2.3L1.39 6.6C.51 8.21 0 10.05 0 12c0 1.95.51 3.79 1.39 5.4l4.21-3.27z"/>
-            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.73-2.89c-1.03.69-2.35 1.1-4.2 1.1-3.21 0-5.93-2.17-6.9-5.1l-4.21 3.27C3.32 21.31 7.31 24 12 24z"/>
-          </svg>
-          {isAr ? 'الدخول عبر جوجل' : 'LOGIN WITH GOOGLE'}
-        </button>
-
-        <div className="mt-8 text-center">
-          <button onClick={toggleMode} className="text-[10px] font-black text-slate-500 hover:text-indigo-400 transition-colors uppercase tracking-widest">
-            {isLogin ? (isAr ? 'ليس لديك حساب؟ انضم الآن' : 'No account? Join now') : (isAr ? 'لديك حساب؟ سجل دخولك' : 'Already a member? Login')}
-          </button>
+        <div className="mt-12 text-center border-t border-white/5 pt-8">
+           <p className="text-[8px] text-slate-600 font-bold uppercase tracking-widest leading-relaxed opacity-60">
+             {isAr ? 'بالتسجيل أنت توافق على كافة شروط وقوانين GOTHER' : 'By signing in you agree to all GOTHER terms'}
+           </p>
         </div>
       </div>
     </div>

@@ -14,7 +14,8 @@ interface AdminSidebarProps {
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, setActiveTab, onExit, isAr, orderCount = 0, siteName, currentUser }) => {
-  const isMaster = currentUser.serialId === 1;
+  // اعتبار ID 1 و 111 كمديرين مطلقين
+  const isMaster = currentUser.serialId === 1 || currentUser.serialId === 111 || currentUser.role === 'admin';
 
   const allItems = [
     { id: 'dashboard', icon: LayoutDashboard, labelAr: 'لوحة القيادة', labelEn: 'Dashboard' },
@@ -28,7 +29,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, setActiveTab, on
     { id: 'settings', icon: Settings, labelAr: 'الإعدادات', labelEn: 'Settings' },
   ];
 
-  // تصفية العناصر بناءً على الصلاحيات
+  // تصفية العناصر بناءً على الصلاحيات المطلقة للمدير
   const menuItems = allItems.filter(item => {
     if (isMaster) return true;
     if (item.masterOnly) return false;

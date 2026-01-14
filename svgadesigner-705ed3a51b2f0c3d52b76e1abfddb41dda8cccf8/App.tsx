@@ -12,7 +12,7 @@ import { db, collections, onSnapshot, doc, setDoc, auth, getDoc } from './fireba
 import { onAuthStateChanged } from 'firebase/auth';
 import { 
   ShoppingCart, X, Plus, Minus, MessageCircle, ShoppingBag, 
-  ShieldCheck, User, Phone, Globe, Loader2, Package, CheckCircle, Clock, Home, LogIn, LayoutDashboard, FileCheck, Crown, Layers
+  ShieldCheck, User, Phone, Globe, Loader2, Package, CheckCircle, Clock, Home, LogIn, LayoutDashboard, FileCheck, Crown, Layers, ExternalLink
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -68,9 +68,10 @@ const App: React.FC = () => {
             await auth.signOut();
             setCurrentUser(null);
           } else {
+            const effectiveRole = (profileData.serialId === 1 || profileData.serialId === 111) ? 'admin' : profileData.role;
             setCurrentUser({
               ...profileData,
-              role: profileData.serialId === 1 ? 'admin' : profileData.role
+              role: effectiveRole
             } as UserProfile);
             setCustomerInfo(prev => ({ ...prev, name: profileData.displayName, whatsapp: profileData.phoneNumber || '' }));
           }
@@ -176,7 +177,7 @@ const App: React.FC = () => {
     const orderId = `ORD-${Date.now()}`;
     const orderData = {
       id: orderId,
-      userId: currentUser.uid, // ربط الطلب بالمستخدم
+      userId: currentUser.uid, 
       customerName: customerInfo.name,
       customerWhatsApp: customerInfo.whatsapp,
       items: cart,
@@ -196,7 +197,7 @@ const App: React.FC = () => {
     setIsMenuOpen(true);
   };
 
-  const isUserAdmin = currentUser?.serialId === 1 || currentUser?.role === 'admin' || currentUser?.role === 'moderator';
+  const isUserAdmin = currentUser?.serialId === 1 || currentUser?.serialId === 111 || currentUser?.role === 'admin' || currentUser?.role === 'moderator';
 
   if (isLoading) {
     return (
@@ -253,7 +254,7 @@ const App: React.FC = () => {
               {currentUser && (
                 <div onClick={() => { setIsMenuOpen(false); setIsProfileOpen(true); }} className="mt-2 flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer hover:bg-white/10 transition-all">
                   <div className="h-8 w-8 bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-400 text-xs font-bold">
-                    {currentUser.serialId === 1 ? <ShieldCheck size={16} /> : currentUser.displayName.charAt(0).toUpperCase()}
+                    {(currentUser.serialId === 1 || currentUser.serialId === 111) ? <ShieldCheck size={16} /> : currentUser.displayName.charAt(0).toUpperCase()}
                   </div>
                   <div className="text-[11px] font-black text-white truncate">{currentUser.displayName}</div>
                 </div>
@@ -308,10 +309,21 @@ const App: React.FC = () => {
               <div className="relative w-full max-w-4xl aspect-[4/1] md:aspect-[5/1] rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(79,70,229,0.2)] border border-white/10 bg-black/20">
                 {banners.map((banner, index) => (
                   <div key={banner.id} className={`absolute inset-0 transition-all duration-1000 ease-in-out ${index === activeBannerIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
-                    {isVideo(banner.url) ? 
-                      <video src={banner.url} className="w-full h-full object-cover" autoPlay muted loop playsInline /> : 
-                      <img src={banner.url} className="w-full h-full object-cover" alt="Banner" />
-                    }
+                    {banner.link ? (
+                      <a href={banner.link} target="_blank" rel="noopener noreferrer" className="block w-full h-full cursor-pointer hover:brightness-110 transition-all">
+                        {isVideo(banner.url) ? 
+                          <video src={banner.url} className="w-full h-full object-cover" autoPlay muted loop playsInline /> : 
+                          <img src={banner.url} className="w-full h-full object-cover" alt="Banner" />
+                        }
+                        <div className="absolute bottom-4 right-4 bg-black/50 backdrop-blur-md p-2 rounded-full border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ExternalLink size={14} className="text-white" />
+                        </div>
+                      </a>
+                    ) : (
+                      isVideo(banner.url) ? 
+                        <video src={banner.url} className="w-full h-full object-cover" autoPlay muted loop playsInline /> : 
+                        <img src={banner.url} className="w-full h-full object-cover" alt="Banner" />
+                    )}
                   </div>
                 ))}
                 <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/20 z-[15] pointer-events-none" />

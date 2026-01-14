@@ -13,7 +13,9 @@ import {
   addDoc, 
   getDoc, 
   query, 
-  where 
+  where,
+  orderBy,
+  limit
 } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
@@ -45,4 +47,4 @@ export const collections = {
   categories: collection(db, "categories")
 };
 
-export { doc, setDoc, getDocs, onSnapshot, updateDoc, deleteDoc, addDoc, getDoc, query, where };
+export { doc, setDoc, getDocs, onSnapshot, updateDoc, deleteDoc, addDoc, getDoc, query, where, orderBy, limit };

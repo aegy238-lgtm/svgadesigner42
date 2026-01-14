@@ -8,7 +8,6 @@ import UserManager from './UserManager';
 import CategoryManager from './CategoryManager';
 import AdminSettings from './AdminSettings';
 import StaffManager from './StaffManager'; 
-// Add missing import for AccountLinker
 import AccountLinker from './AccountLinker';
 import { Product, Order, UserProfile } from '../../types';
 import { db, doc, setDoc, deleteDoc, updateDoc } from '../../firebase';
@@ -39,14 +38,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isAr,
   currentUser
 }) => {
-  const isMaster = currentUser.serialId === 1;
+  // اعتبار ID 1 و 111 كـ Master Admin
+  const isMaster = currentUser.serialId === 1 || currentUser.serialId === 111 || currentUser.role === 'admin';
   const initialTab = isMaster || currentUser.permissions?.includes('dashboard') ? 'dashboard' : (currentUser.permissions?.[0] || 'dashboard');
   
   const [activeTab, setActiveTab] = useState(initialTab);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // التحقق هل يملك المشرف صلاحية الوصول للصفحة الحالية
+  // التحقق من صلاحية الوصول مع منح الأولوية للمدير العام
   const hasAccess = (tab: string) => {
     if (isMaster) return true;
     if (tab === 'dashboard' && currentUser.permissions?.includes('dashboard')) return true;
