@@ -1,6 +1,6 @@
 
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" style="background-color: #0f0518;">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,10 +8,15 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
+    html, body {
+      background-color: #0f0518 !important;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+    }
     body {
       font-family: 'Cairo', sans-serif;
       scroll-behavior: smooth;
-      background-color: #0f0518;
       color: #ffffff;
       overflow-x: hidden;
     }
@@ -87,11 +92,9 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body class="text-white">
   <div id="root"></div>
   <script type="module" src="./index.tsx"></script>
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>

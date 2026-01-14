@@ -12,7 +12,7 @@ import { db, collections, onSnapshot, doc, setDoc, auth, getDoc } from './fireba
 import { onAuthStateChanged } from 'firebase/auth';
 import { 
   ShoppingCart, X, Plus, Minus, MessageCircle, ShoppingBag, 
-  ShieldCheck, User, Phone, Globe, Loader2, Package, CheckCircle, Clock, Home, LogIn, LayoutDashboard, FileCheck, Crown, Layers, ExternalLink
+  ShieldCheck, User, Phone, Globe, Package, CheckCircle, Clock, Home, LogIn, LayoutDashboard, FileCheck, Crown, Layers, ExternalLink
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -27,7 +27,6 @@ const App: React.FC = () => {
   const [siteName, setSiteName] = useState<string>('GoTher');
   const [sectionTitleAr, setSectionTitleAr] = useState<string>('أحدث الهدايا المتميزة');
   const [sectionTitleEn, setSectionTitleEn] = useState<string>('PREMIUM GIFTS');
-  const [isLoading, setIsLoading] = useState(true);
   
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -82,39 +81,20 @@ const App: React.FC = () => {
       }
     });
 
-    let productsLoaded = false;
-    let ordersLoaded = false;
-    let bannersLoaded = false;
-    let categoriesLoaded = false;
-
-    const checkLoading = () => {
-      if (productsLoaded && ordersLoaded && bannersLoaded && categoriesLoaded) {
-        setIsLoading(false);
-      }
-    };
-
     const unsubProducts = onSnapshot(collections.products, (snapshot) => {
       setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
-      productsLoaded = true;
-      checkLoading();
     });
 
     const unsubCategories = onSnapshot(collections.categories, (snapshot) => {
       setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
-      categoriesLoaded = true;
-      checkLoading();
     });
 
     const unsubOrders = onSnapshot(collections.orders, (snapshot) => {
       setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
-      ordersLoaded = true;
-      checkLoading();
     });
 
     const unsubBanners = onSnapshot(collections.banners, (snapshot) => {
       setBanners(snapshot.docs.map(doc => ({ id: doc.id, url: doc.data().url, link: doc.data().link })));
-      bannersLoaded = true;
-      checkLoading();
     });
 
     const unsubConfig = onSnapshot(doc(db, "settings", "store_config"), (docSnap) => {
@@ -198,14 +178,6 @@ const App: React.FC = () => {
   };
 
   const isUserAdmin = currentUser?.serialId === 1 || currentUser?.serialId === 111 || currentUser?.role === 'admin' || currentUser?.role === 'moderator';
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#0f0518] flex flex-col items-center justify-center text-white">
-        <Loader2 className="h-10 w-10 text-indigo-500 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className={`min-h-screen bg-[#0f0518] ${isAr ? 'rtl' : 'ltr'} flex flex-col`}>
@@ -345,10 +317,15 @@ const App: React.FC = () => {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredProducts.map(product => (
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 min-h-[400px]">
+              {products.length > 0 ? filteredProducts.map(product => (
                 <ProductCard key={product.id} product={product} lang={lang} onAddToCart={addToCart} onPreview={setPreviewProduct} />
-              ))}
+              )) : (
+                Array(4).fill(0).map((_, idx) => (
+                  <div key={idx} className="aspect-[3/4] bg-white/5 rounded-2xl animate-pulse" />
+                ))
+              )}
             </div>
           </section>
         </main>
